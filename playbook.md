@@ -54,3 +54,11 @@ Min win11 har ikke __touch__ installeret men hvis den var kunne jeg have skrevet
     touch .\mosquitto\data\.gitkeep
     touch .\mosquitto\log\.gitkeep
 
+### første start og hul-igennem-test
+
+start
+
+    docker-compose up -d
+
+( hvis ikke det spiller, kan man prøve uden `-d`)
+
