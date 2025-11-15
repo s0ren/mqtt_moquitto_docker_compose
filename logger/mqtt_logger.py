@@ -24,7 +24,8 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     try:
         payload = msg.payload.decode()
-    except:
+    except Exception as e:
+        print(f"Failed to decode payload: {e}")
         payload = str(msg.payload)
     
     data = {
@@ -33,11 +34,24 @@ def on_message(client, userdata, msg):
         "payload": payload
     }
     
-    filename = LOG_DIR / safe_filename(msg.topic)
-    with open(filename, "a") as f:
-        f.write(json.dumps(data, ensure_ascii=False) + "\n")
-    
-    print(f"Logged: {msg.topic}")
+    try:
+        filename = LOG_DIR / safe_filename(msg.topic)
+        
+        # Opret undermapper hvis de ikke eksisterer
+        filename.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Skriv til fil
+        with open(filename, "a") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        
+        print(f"Logged: {msg.topic}")
+        
+    except PermissionError as e:
+        print(f"Permission denied writing to {filename}: {e}")
+    except OSError as e:
+        print(f"OS error writing to {filename}: {e}")
+    except Exception as e:
+        print(f"Unexpected error logging message from {msg.topic}: {e}")
 
 def main():
     client = mqtt.Client()
@@ -55,4 +69,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
