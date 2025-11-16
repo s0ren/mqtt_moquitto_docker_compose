@@ -12,6 +12,8 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 MQTT_BROKER = os.getenv('MQTT_BROKER', 'localhost')
 MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))
 
+hash_filename = LOG_DIR / "#.jsonl"
+
 def safe_filename(topic):
     """Konverter topic til gyldig filnavn"""
     return re.sub(r'[^\w\-_/]', '_', topic) + '.jsonl'
@@ -44,6 +46,10 @@ def on_message(client, userdata, msg):
         with open(filename, "a") as f:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
         
+        # alle topics i global fil
+        with open(hash_filename, "a") as f:
+            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
         print(f"Logged: {msg.topic}")
         
     except PermissionError as e:
