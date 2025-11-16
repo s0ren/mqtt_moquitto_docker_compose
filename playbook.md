@@ -361,3 +361,188 @@ Resten af filerne forbliver de samme. Nu matcher strukturen DataCamp's tutorial!
 
 Så nu prøver jeg at kopiere alle tingene ud i de rigtige filer, og se om det kan køre...
 
+efter meget chat virker det nu. Se git []()
+
+---
+
+# Promt
+
+> ... jeg vil også gerne at Mosquitto mqtt både accepterer annomyme opkald, og med password
+---
+
+Ah, det giver god mening! Så skal du have:
+- Port 1883: Anonym (usikret)
+- Port 8883: SSL/TLS med brugernavn + password (sikret)
+
+Her er hvordan:
+
+## 1. Opret SSL certifikater
+
+Først skal vi generere self-signed certificates:
+
+```bash
+# Opret certs mappe
+mkdir -p mosquitto/certs
+cd mosquitto/certs
+
+# Generer CA (Certificate Authority)
+openssl req -new -x509 -days 3650 -extensions v3_ca -keyout ca.key -out ca.crt -subj "/CN=MQTT-CA"
+
+# Generer server key og certificate signing request
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr -subj "/CN=localhost"
+
+# Sign server certificate med CA
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 3650
+
+# Cleanup
+rm server.csr ca.srl
+
+cd ../..
+```
+
+## 2. Opdater mosquitto.conf
+
+```conf
+# Anonym listener på port 1883 (usikret)
+listener 1883
+allow_anonymous true
+
+# Authenticated listener på port 8883 (SSL/TLS)
+listener 8883
+allow_anonymous false
+password_file /mosquitto/config/password.txt
+
+# SSL/TLS certifikater
+cafile /mosquitto/certs/ca.crt
+certfile /mosquitto/certs/server.crt
+keyfile /mosquitto/certs/server.key
+
+# TLS version (valgfrit, kun moderne versioner)
+tls_version tlsv1.2
+
+# Persistence
+persistence true
+persistence_location /mosquitto/data/
+
+# Logging
+log_dest file /mosquitto/log/mosquitto.log
+log_dest stdout
+```
+
+## 3. Opdater docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"   # Anonym
+      - "8883:8883"   # SSL/TLS
+      - "9001:9001"   # WebSocket (valgfrit)
+    volumes:
+      - ./mosquitto/conf/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto/conf/password.txt:/mosquitto/config/password.txt
+      - ./mosquitto/certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/log
+    restart: unless-stopped
+
+  mqtt-logger:
+    build: ./logger
+    container_name: mqtt-logger
+    depends_on:
+      - mosquitto
+    volumes:
+      - mqtt-logs:/var/mqtt_logs
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+    restart: unless-stopped
+
+  nginx:
+    build: ./nginx
+    container_name: mqtt-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - mqtt-logs:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data:
+  mosquitto-logs:
+  mqtt-logs:
+```
+
+## 4. Opret password fil
+
+```bash
+docker-compose up -d
+docker exec -it mqtt-broker mosquitto_passwd -c /mosquitto/config/password.txt elev1
+docker exec -it mqtt-broker mosquitto_passwd /mosquitto/config/password.txt laerer
+docker-compose restart mosquitto
+```
+
+## 5. Test begge forbindelser
+
+**Anonym på port 1883:**
+```bash
+docker exec mqtt-broker mosquitto_pub -h localhost -p 1883 -t "test/anonym" -m "Uden sikkerhed"
+```
+
+**Authenticated på port 8883 med TLS:**
+```bash
+docker exec mqtt-broker mosquitto_pub -h localhost -p 8883 \
+  --cafile /mosquitto/certs/ca.crt \
+  -u elev1 -P <password> \
+  -t "test/sikker" -m "Med TLS og password"
+```
+
+## 6. Python client eksempel med TLS
+
+Hvis eleverne skal connecte udefra med Python:
+
+```python
+import paho.mqtt.client as mqtt
+import ssl
+
+client = mqtt.Client()
+client.username_pw_set("elev1", "password")
+
+# Konfigurer TLS
+client.tls_set(
+    ca_certs="ca.crt",  # Path til CA certificate
+    tls_version=ssl.PROTOCOL_TLSv1_2
+)
+
+# For self-signed certificates (kun til test!)
+client.tls_insecure_set(True)
+
+client.connect("din-server", 8883, 60)
+client.publish("test/sikker", "Hello via TLS!")
+```
+
+Nu har du:
+- 🔓 **Port 1883**: Anonym, usikret (til hurtig test)
+- 🔐 **Port 8883**: TLS + brugernavn/password (til produktion)
+
+Eleverne kan kopiere `ca.crt` fra `mosquitto/certs/` for at connecte med TLS! 🚀
+
+---
+
+## Certs
+
+Passfrase 
+: `teciotemb`
+
+## mosquitto.conf
+
+Måtte tilføje 
+```
+# Enable per-listener settings
+per_listener_settings true
+```
