@@ -1,13 +1,41 @@
 services:
   mosquitto:
     image: eclipse-mosquitto:latest
-    container_name: mosquitto
+    container_name: mqtt-broker
     restart: unless-stopped
     ports:
       - "1883:1883"    # MQTT
       - "8883:8883"    # MQTTS (secure)
-      - "9001:9001"    # WebSockets
+      # - "9001:9001"    # WebSockets
     volumes:
       - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/certs:/mosquitto/certs:ro
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
+
+
+  mqtt-logger:
+    build: ./logger
+    container_name: mqtt-logger
+    depends_on:
+      - mosquitto
+    volumes:
+      - mqtt-logs:/var/mqtt_logs
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+    restart: unless-stopped
+
+  nginx:
+    build: ./nginx
+    container_name: mqtt-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - mqtt-logs:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+volumes:
+  # mosquitto-data:
+  # mosquitto-logs:
+  mqtt-logs:
