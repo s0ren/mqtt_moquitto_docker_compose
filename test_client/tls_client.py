@@ -16,7 +16,7 @@ client.tls_set(
 )
 
 # For self-signed certificates (kun til test!)
-client.tls_insecure_set(True)
+# client.tls_insecure_set(True)
 
 client.connect("localhost", 8883, 60)
 client.publish("test/sikker", "Hello via TLS, fra ekstern klient!")
