@@ -36,3 +36,32 @@ rm server.csr ca.srl
 
 cd ../..
 ```
+
+#### Multidomain cert
+
+san.cnf
+```ini
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+
+[req_distinguished_name]
+
+[v3_req]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = wilson.local
+DNS.2 = localhost
+IP.1 = 127.0.0.1
+IP.2 = 192.168.0.161
+```
+
+Create
+
+    openssl req -new -newkey rsa:4096 -nodes -keyout server.key -out server.csr -subj "/CN=wilson.local" -config san.cnf
+
+
+Sign
+
+    openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile san.cnf -extensions v3_req
